@@ -13,6 +13,8 @@
 #include <string>
 #include <stdint.h>
 #include <stdarg.h>
+#include <fstream>
+#include <vector>
 #include <memory>
 #include "../basic/basicDefine.h"
 
@@ -160,6 +162,7 @@ private:
 
 class Logger {
 public:
+    typedef std::shared_ptr<Logger> LoggerPtr;
     Logger();
 
     /**
@@ -171,6 +174,112 @@ public:
 
 private:
 
+};
+
+class LogFormatter {
+public:
+    typedef std::shared_ptr<LogFormatter> LogFormatterPtr;
+
+    LogFormatter(const std::string &pattern);
+
+    std::string format(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event);
+
+    std::ostream& format(std::ostream& ofs, Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event);
+
+public:
+    class FormatItem {
+    public:
+        typedef std::shared_ptr<FormatItem> FormatItemPtr;
+
+        virtual ~FormatItem() = default;
+    };
+
+    void init();
+
+    bool isError() const {return m_error;}
+
+    const std::string getPattern() const {return m_pattern;}
+private:
+    std::string m_pattern;
+    bool m_error = false;
+    std::vector<FormatItem::FormatItemPtr> m_items;
+
+};
+
+class LogAppender {
+public:
+    typedef std::shared_ptr<LogAppender> LogAppenderPtr;
+
+    /**
+     * @brief
+     * @param level
+     * @param event
+     */
+    virtual void log(Logger::LoggerPtr logger, LogLevel::level level, LogEvent::LogEventPtr event) = 0;
+
+    /**
+     * @brief
+     */
+    virtual ~LogAppender() = default;
+
+    virtual std::string toYamlString() = 0;
+
+    LogFormatter::LogFormatterPtr getFormatter() const;
+
+    void setFormatter(LogFormatter::LogFormatterPtr formatter);
+
+    /**
+     * @brief
+     * @return
+     */
+    LogLevel::Level getLevel() const {return m_level;}
+
+    /**
+     * @brief
+     * @param level
+     */
+    void setLevel(LogLevel::Level level) {m_level = level;}
+
+    /**
+     * @brief
+     * @return
+     */
+    virtual std::string toYamlString() = 0;
+
+
+protected:
+    LogLevel::Level m_level = LogLevel::DEBUG;
+    bool m_hasFormatter = false;
+
+    LogFormatter::LogFormatterPtr m_formatter;
+};
+
+class StdoutLogAppender : public LogAppender {
+public:
+    typedef std::shared_ptr<StdoutLogAppender> StdoutLogAppenderPtr;
+
+    void log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) override;
+
+};
+
+class FileLogAppender : public LogAppender{
+public:
+    typedef std::shared_ptr<FileLogAppender> FileLogAppender;
+
+    /**
+     * @brief
+     * @param filename
+     */
+    FileLogAppender(const std::string &filename);
+
+    void log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) override;
+
+    bool reopen();
+
+private:
+    std::string m_filename;
+    std::ofstream m_filestream;
+    uint64_t m_lastTime = 0;
 };
 
 KAFKA_NAMESPACE_END
