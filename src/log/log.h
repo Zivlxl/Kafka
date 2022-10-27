@@ -24,24 +24,30 @@ class Logger;
 class LoggerManager;
 
 /**
- * @brief log level
+ * @brief 日志级别
  */
 class LogLevel {
 public:
     /**
-     * @brief
+     * @brief 日志级别枚举
      */
-    enum Level {UNKNOWN = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4, FATAL = 5};
+    enum Level {
+        UNKNOWN = 0,
+        DEBUG = 1,
+        INFO = 2,
+        WARN = 3,
+        ERROR = 4,
+        FATAL = 5};
 
     /**
-     * @brief
+     * @brief 将日志级别转换成字符串输出
      * @param level
      * @return
      */
     static const char * toString(LogLevel::level level);
 
     /**
-     * @brief
+     * @brief 将文本转换成日志格式级别
      * @param str
      * @return
      */
@@ -149,7 +155,9 @@ public:
 
 private:
     const char* m_file = nullptr;
+    //行号
     int32_t m_line = 0;
+    //程序启动到现在的毫秒数
     uint32_t m_elapse = 0;
     uint32_t m_threadId = 0;
     uint32_t m_fiberId = 0;
@@ -191,7 +199,19 @@ public:
     public:
         typedef std::shared_ptr<FormatItem> FormatItemPtr;
 
+        /**
+         * @brief
+         */
         virtual ~FormatItem() = default;
+
+        /**
+         * @brief
+         * @param os 输出流
+         * @param logger 日志
+         * @param level
+         * @param event
+         */
+        virtual void format(std::ostream& os, Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) = 0;
     };
 
     void init();
@@ -260,6 +280,8 @@ public:
 
     void log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) override;
 
+    std::string toYamlString() override;
+
 };
 
 class FileLogAppender : public LogAppender{
@@ -273,6 +295,8 @@ public:
     FileLogAppender(const std::string &filename);
 
     void log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) override;
+
+    std::string toYamlString() override;
 
     bool reopen();
 
