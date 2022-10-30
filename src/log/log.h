@@ -16,11 +16,14 @@
 #include <fstream>
 #include <vector>
 #include <memory>
+#include <list>
+#include <sstream>
 #include "../basic/basicDefine.h"
 
 KAFKA_NAMESPACE_BEGIN
 
 class Logger;
+class LogAppender;
 class LoggerManager;
 
 /**
@@ -44,7 +47,7 @@ public:
      * @param level
      * @return
      */
-    static const char * toString(LogLevel::level level);
+    static const char * toString(LogLevel::Level level);
 
     /**
      * @brief 将文本转换成日志格式级别
@@ -60,7 +63,7 @@ public:
 class LogEvent {
 public:
     using LogEventPtr = std::shared_ptr<LogEvent>;
-    LogEvent();
+    LogEvent() = default;
 
     /**
      * @brief
@@ -74,7 +77,7 @@ public:
      * @param time
      * @param thread_name
      */
-    LogEvent(std::shared<Logger> logger, LogLevel::Level level,
+    LogEvent(std::shared_ptr<Logger> logger, LogLevel::Level level,
              const char* file, int32_t line, uint32_t elapse,
              uint32_t thread_id, uint32_t fiber_id, uint64_t time,
              const std::string & thread_name);
@@ -168,32 +171,19 @@ private:
     LogLevel::Level m_level;
 };
 
-class Logger {
-public:
-    typedef std::shared_ptr<Logger> LoggerPtr;
-    Logger();
-
-    /**
-     * @brief
-     * @param level
-     * @param event
-     */
-    void log (Level level, const LogEvent & event);
-
-private:
-
-};
-
 class LogFormatter {
 public:
     typedef std::shared_ptr<LogFormatter> LogFormatterPtr;
 
     LogFormatter(const std::string &pattern);
 
-    std::string format(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event);
+    std::string format(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event);
 
-    std::ostream& format(std::ostream& ofs, Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event);
+    std::ostream& format(std::ostream& ofs, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event);
 
+    /**
+     * @brief generate format
+     */
 public:
     class FormatItem {
     public:
@@ -211,7 +201,7 @@ public:
          * @param level
          * @param event
          */
-        virtual void format(std::ostream& os, Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) = 0;
+        virtual void format(std::ostream& os, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event) = 0;
     };
 
     void init();
@@ -235,14 +225,12 @@ public:
      * @param level
      * @param event
      */
-    virtual void log(Logger::LoggerPtr logger, LogLevel::level level, LogEvent::LogEventPtr event) = 0;
+    virtual void log(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event) = 0;
 
     /**
      * @brief
      */
     virtual ~LogAppender() = default;
-
-    virtual std::string toYamlString() = 0;
 
     LogFormatter::LogFormatterPtr getFormatter() const;
 
@@ -266,12 +254,132 @@ public:
      */
     virtual std::string toYamlString() = 0;
 
-
-protected:
-    LogLevel::Level m_level = LogLevel::DEBUG;
+public:
     bool m_hasFormatter = false;
 
+    LogLevel::Level m_level = LogLevel::DEBUG;
+
     LogFormatter::LogFormatterPtr m_formatter;
+};
+
+class Logger : public std::enable_shared_from_this<Logger> {
+public:
+    typedef std::shared_ptr<Logger> LoggerPtr;
+
+    /**
+     * @brief
+     * @param name
+     */
+    explicit Logger(const std::string &name = "root");
+
+    /**
+     * @brief
+     * @param level
+     * @param event
+     */
+    void log (LogLevel::Level level, const LogEvent::LogEventPtr & event);
+
+    /**
+     * @brief
+     * @param event
+     */
+    void debug(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     * @param event
+     */
+    void info(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     * @param event
+     */
+    void warn(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     * @param event
+     */
+    void error(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     * @param event
+     */
+    void fatal(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     * @param appender
+     */
+    void addAppender(LogAppender::LogAppenderPtr appender);
+
+    /**
+     * @brief
+     * @param appender
+     */
+    void delAppender(LogAppender::LogAppenderPtr appender);
+
+    /**
+     * @brief
+     */
+    void cleanAppender();
+
+    /**
+     * @brief
+     * @return
+     */
+    LogLevel::Level getLevel() const {return m_level;}
+
+    /**
+     * @brief
+     * @param level
+     */
+    void setLevel(LogLevel::Level level) {m_level = level;}
+
+    /**
+     * @brief
+     * @return
+     */
+    const std::string& getName() const {return m_name;}
+
+    /**
+     * @brief
+     * @param formatter
+     */
+    void setFormatter(LogFormatter::LogFormatterPtr formatter);
+
+    /**
+     * @brief
+     * @param str
+     */
+    void setFormatter(const std::string& str);
+
+    /**
+     * @brief
+     * @return
+     */
+    LogFormatter::LogFormatterPtr getFormatter();
+
+    /**
+     * @brief
+     * @return
+     */
+    std::string toYamlString();
+private:
+    //日志级别
+    LogLevel::Level m_level;
+    //日志名称
+    std::string m_name;
+    //日志输出目标集合
+    std::list<LogAppender::LogAppenderPtr> m_appenders;
+    //主日志器
+    Logger::LoggerPtr m_root;
+    //
+    LogFormatter::LogFormatterPtr m_formatter;
+
+
 };
 
 class StdoutLogAppender : public LogAppender {
@@ -286,13 +394,15 @@ public:
 
 class FileLogAppender : public LogAppender{
 public:
-    typedef std::shared_ptr<FileLogAppender> FileLogAppender;
+    typedef std::shared_ptr<FileLogAppender> FileLogAppenderPtr;
 
     /**
      * @brief
      * @param filename
      */
-    FileLogAppender(const std::string &filename);
+    explicit FileLogAppender(const std::string &filename);
+
+    ~FileLogAppender() override;
 
     void log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) override;
 

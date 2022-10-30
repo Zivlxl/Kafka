@@ -10,4 +10,6 @@
 #ifndef KAFKA_LOGINCLUDE_H
 #define KAFKA_LOGINCLUDE_H
 
+#include "log.h"
+
 #endif //KAFKA_LOGINCLUDE_H

@@ -13,10 +13,10 @@
 #include <cstddef>
 
 #define KAFKA_NAMESPACE_BEGIN \
-namespace KAFKA {             \
+namespace KAFKA {
 
 #define KAFKA_NAMESPACE_END \
-}                           \
+}
 
 
 #endif //KAFKA_BASICDEFINE_H

@@ -13,6 +13,7 @@
 #include <time.h>
 #include <string.h>
 #include <iostream>
+#include <memory>
 
 KAFKA_NAMESPACE_BEGIN
 
@@ -37,7 +38,7 @@ const char * LogLevel::toString(LogLevel::Level level) {
 LogLevel::Level LogLevel::fromString(const std::string &str) {
 #define Func(level, v)  \
     if(str == #v) {     \
-        return LogLevel::level \
+        return LogLevel::level; \
     }
 
     Func(DEBUG, debug);
@@ -53,6 +54,27 @@ LogLevel::Level LogLevel::fromString(const std::string &str) {
     Func(FATAL, FATAL);
 #undef Func
     return LogLevel::UNKNOWN;
+}
+
+LogEvent::LogEvent(std::shared_ptr<Logger> logger, LogLevel::Level level, const char *file, int32_t line, uint32_t elapse,
+                   uint32_t thread_id, uint32_t fiber_id, uint64_t time, const std::string &thread_name) :
+                   m_file(file), m_line(line), m_elapse(elapse), m_threadId(thread_id), m_fiberId(fiber_id),
+                   m_time(time), m_threadName(thread_name), m_logger(logger), m_level(level){}
+
+void LogEvent::format(const char *fmt, ...) {
+    va_list al;
+    va_start(al, fmt);
+    format(fmt, al);
+    va_end(al);
+}
+
+void LogEvent::format(const char *fmt, va_list al) {
+    char *buf = nullptr;
+    int len = vasprintf(&buf, fmt, al);
+    if (len != -1) {
+        m_ss << std::string(buf, len);
+        free(buf);
+    }
 }
 
 class MessageFormatItem : public LogFormatter::FormatItem {
@@ -135,7 +157,7 @@ public:
         struct tm tm;
         time_t time = event->getTime();
         localtime_r(&time, &tm);
-        constexpr bufferSize = m_format * 10;
+        constexpr int bufferSize = 1000;
         char buf[bufferSize];
         strftime(buf, sizeof(buf), m_format.c_str(), &tm);
         os << buf;
@@ -216,20 +238,21 @@ LogFormatter::LogFormatter(const std::string &pattern) : m_pattern(pattern) {
     init();
 }
 
-std::string LogFormatter::format(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) {
+std::string LogFormatter::format(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event) {
     std::stringstream ss;
     for (auto & item : m_items) {
         item->format(ss, logger, level, event);
     }
+    ss << std::endl;
     return ss.str();
 }
 
-std::ostream& LogFormatter::format(std::ostream &ofs, Logger::LoggerPtr logger, LogLevel::Level level,
+std::ostream& LogFormatter::format(std::ostream &ofs, std::shared_ptr<Logger> logger, LogLevel::Level level,
                                    LogEvent::LogEventPtr event) {
     for (auto & item : m_items) {
         item->format(ofs, logger, level, event);
     }
-
+    ofs << std::endl;
     return ofs;
 }
 
@@ -248,7 +271,7 @@ void LogFormatter::init() {
         }
 
         //连续两个%，把第一个视作普通字符串的一部分
-        if ((i + 1) < m_pattern.size()) {
+        if ((i + 1) < m_pattern.size() && m_pattern[i + 1] == '%') {
             nstr.append(1, '%');
             continue;
         }
@@ -264,6 +287,7 @@ void LogFormatter::init() {
         while (n < m_pattern.size()) {
             if (!fmt_status && (!isalpha(m_pattern[n]) && m_pattern[n] != '{' && m_pattern[n] != '}')) {
                 str = m_pattern.substr(i + 1, n - i - 1);
+                break;
             }
 
             if (!fmt_status) {
@@ -352,14 +376,99 @@ void LogFormatter::init() {
     }
 }
 
+LogFormatter::LogFormatterPtr LogAppender::getFormatter() const {
+    return m_formatter;
+}
+
 void LogAppender::setFormatter(LogFormatter::LogFormatterPtr formatter) {
     m_formatter = formatter;
     if (m_formatter) m_hasFormatter = true;
     else m_hasFormatter = false;
 }
 
-LogFormatter::LogFormatterPtr LogAppender::getFormatter() {
+Logger::Logger(const std::string &name) : m_level(LogLevel::DEBUG), m_name(name) {
+    m_formatter.reset(new LogFormatter("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"));
+}
+
+void Logger::setFormatter(LogFormatter::LogFormatterPtr formatter) {
+    m_formatter = formatter;
+
+    for (auto &item : m_appenders) {
+        if (!item->m_hasFormatter) {
+            item->m_formatter = m_formatter;
+        }
+    }
+}
+
+void Logger::setFormatter(const std::string &str) {
+    LogFormatter::LogFormatterPtr formatter(new LogFormatter(str));
+    if (formatter->isError()) {
+        std::cout << "Logger setFormatter name=" << m_name
+                 << ", value=" << str << ". invalid formatter." << std::endl;
+        return;
+    }
+
+    setFormatter(formatter);
+}
+
+LogFormatter::LogFormatterPtr Logger::getFormatter() {
     return m_formatter;
+}
+
+void Logger::addAppender(LogAppender::LogAppenderPtr appender) {
+    if (!appender->getFormatter()) {
+        appender->setFormatter(m_formatter);
+    }
+    m_appenders.push_back(appender);
+}
+
+void Logger::delAppender(LogAppender::LogAppenderPtr appender) {
+    for (auto it = m_appenders.begin(); it != m_appenders.end(); it++) {
+        if (*it == appender) {
+            m_appenders.erase(it);
+            break;
+        }
+    }
+}
+
+void Logger::cleanAppender() {
+    m_appenders.clear();
+}
+
+
+
+void Logger::log(LogLevel::Level level, const LogEvent::LogEventPtr &event) {
+    if (level >= m_level) {
+        auto self = shared_from_this();
+        if (!m_appenders.empty()) {
+            for (auto &item : m_appenders) {
+                item->log(self, level, event);
+            }
+        }
+        else if (m_root) {
+            m_root->log(level, event);
+        }
+    }
+}
+
+void Logger::debug(LogEvent::LogEventPtr event) {
+    log(LogLevel::Level::DEBUG, event);
+}
+
+void Logger::info(LogEvent::LogEventPtr event) {
+    log(LogLevel::Level::INFO, event);
+}
+
+void Logger::warn(LogEvent::LogEventPtr event) {
+    log(LogLevel::Level::WARN, event);
+}
+
+void Logger::error(LogEvent::LogEventPtr event) {
+    log(LogLevel::Level::ERROR, event);
+}
+
+void Logger::fatal(LogEvent::LogEventPtr event) {
+    log(LogLevel::FATAL, event);
 }
 
 void StdoutLogAppender::log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) {
@@ -369,11 +478,15 @@ void StdoutLogAppender::log(Logger::LoggerPtr logger, LogLevel::Level level, Log
 }
 
 std::string StdoutLogAppender::toYamlString() {
-
+    return "";
 }
 
 FileLogAppender::FileLogAppender(const std::string &filename) : m_filename(filename) {
+    m_filestream.open(filename, std::ios::out | std::ios::app);
+}
 
+FileLogAppender::~FileLogAppender() {
+    m_filestream.close();
 }
 
 void FileLogAppender::log(Logger::LoggerPtr logger, LogLevel::Level level, LogEvent::LogEventPtr event) {
@@ -383,7 +496,8 @@ void FileLogAppender::log(Logger::LoggerPtr logger, LogLevel::Level level, LogEv
 }
 
 std::string FileLogAppender::toYamlString() {
-
+    //
+    return "";
 }
 
 bool FileLogAppender::reopen() {
@@ -393,4 +507,5 @@ bool FileLogAppender::reopen() {
     m_filestream.open(m_filename);
     return !!m_filestream;
 }
+
 KAFKA_NAMESPACE_END
