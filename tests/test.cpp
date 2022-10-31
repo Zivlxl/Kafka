@@ -14,11 +14,13 @@ int main(int argc, char **argv) {
     logger->addAppender(KAFKA::LogAppender::LogAppenderPtr(new KAFKA::FileLogAppender("out.txt")));
     logger->addAppender(KAFKA::LogAppender::LogAppenderPtr(new KAFKA::StdoutLogAppender));
 
-    KAFKA::LogEvent::LogEventPtr event(new KAFKA::LogEvent(logger, KAFKA::LogLevel::DEBUG, __FILE__, __LINE__, 0, 1, 2, time(0), "main"));
+    //KAFKA::LogEvent::LogEventPtr event(new KAFKA::LogEvent(logger, KAFKA::LogLevel::DEBUG, __FILE__, __LINE__, 0, 1, 2, time(0), "main"));
 
-    logger->debug(event);
-    logger->fatal(event);
+//    logger->debug(event);
+//    logger->fatal(event);
 
+    KAFKA_LOG_DEBUG(logger) << "this is a main!";
+    KAFKA_LOG_FATAL(logger) << "fatal error~";
 
     return 0;
 }

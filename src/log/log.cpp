@@ -223,16 +223,28 @@ public:
 
 class StringFormatItem : public LogFormatter::FormatItem {
 public:
-    StringFormatItem(const std::string &str) : m_string(str) {}
+    explicit StringFormatItem(const std::string &str) : m_string(str) {}
     void format(std::ostream& os,
                 Logger::LoggerPtr logger,
                 LogLevel::Level level,
-                LogEvent::LogEventPtr event) {
+                LogEvent::LogEventPtr event) override {
         os << m_string;
     }
 private:
     std::string m_string;
 };
+
+LogEventWrap::LogEventWrap(LogEvent::LogEventPtr event) : m_event(event) {
+}
+
+LogEventWrap::~LogEventWrap() {
+    //write logger before delete object
+    m_event->getLogger()->log(m_event->getLevel(), m_event);
+}
+
+std::stringstream& LogEventWrap::getSS() {
+    return m_event->getSS();
+}
 
 LogFormatter::LogFormatter(const std::string &pattern) : m_pattern(pattern) {
     init();

@@ -20,6 +20,19 @@
 #include <sstream>
 #include "../basic/basicDefine.h"
 
+#define KAFKA_LOG_LEVEL(logger, level) \
+    if (logger->getLevel() <= level)  \
+        KAFKA::LogEventWrap(KAFKA::LogEvent::LogEventPtr(new KAFKA::LogEvent(logger, level, \
+                            __FILE__, __LINE__, 0, 1, \
+                            2, time(0), "main"))).getSS()
+
+#define KAFKA_LOG_DEBUG(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::DEBUG)
+#define KAFKA_LOG_INFO(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::INFO)
+#define KAFKA_LOG_WARN(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::WARN)
+#define KAFKA_LOG_ERROR(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::ERROR)
+#define KAFKA_LOG_FATAL(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::FATAL)
+
+
 KAFKA_NAMESPACE_BEGIN
 
 class Logger;
@@ -134,6 +147,12 @@ public:
      * @brief
      * @return
      */
+    std::shared_ptr<Logger> getLogger() const {return m_logger;}
+
+    /**
+     * @brief
+     * @return
+     */
     LogLevel::Level getLevel() const {return m_level;}
 
     /**
@@ -162,20 +181,55 @@ private:
     int32_t m_line = 0;
     //程序启动到现在的毫秒数
     uint32_t m_elapse = 0;
+    //线程ID
     uint32_t m_threadId = 0;
+    //协程ID
     uint32_t m_fiberId = 0;
+    //时间戳
     uint64_t m_time = 0;
+    //线程名称
     std::string m_threadName;
+    //字符串流
     std::stringstream m_ss;
+    //日志器
     std::shared_ptr<Logger> m_logger;
+    //日志等级
     LogLevel::Level m_level;
+};
+
+class LogEventWrap {
+public:
+    /**
+     * @brief
+     * @param event
+     */
+    explicit LogEventWrap(LogEvent::LogEventPtr event);
+
+    /**
+     * @brief
+     */
+    ~LogEventWrap();
+
+    /**
+     * @brief
+     * @return
+     */
+    LogEvent::LogEventPtr getEvent() const {return m_event;}
+
+    /**
+     * @brief
+     * @return
+     */
+    std::stringstream& getSS();
+private:
+    LogEvent::LogEventPtr m_event;
 };
 
 class LogFormatter {
 public:
     typedef std::shared_ptr<LogFormatter> LogFormatterPtr;
 
-    LogFormatter(const std::string &pattern);
+    explicit LogFormatter(const std::string &pattern);
 
     std::string format(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::LogEventPtr event);
 
