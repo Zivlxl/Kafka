@@ -15,22 +15,81 @@
 #include <stdarg.h>
 #include <fstream>
 #include <vector>
+#include <unordered_map>
 #include <memory>
 #include <list>
 #include <sstream>
 #include "../basic/basicDefine.h"
+#include "../basic/singleton.h"
 
+/**
+ * @brief
+ */
 #define KAFKA_LOG_LEVEL(logger, level) \
     if (logger->getLevel() <= level)  \
         KAFKA::LogEventWrap(KAFKA::LogEvent::LogEventPtr(new KAFKA::LogEvent(logger, level, \
                             __FILE__, __LINE__, 0, 1, \
                             2, time(0), "main"))).getSS()
 
+/**
+ * @brief
+ */
 #define KAFKA_LOG_DEBUG(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::DEBUG)
+
+/**
+ * @brief
+ */
 #define KAFKA_LOG_INFO(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::INFO)
+
+/**
+ * @brief
+ */
 #define KAFKA_LOG_WARN(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::WARN)
+
+/**
+ * @brief
+ */
 #define KAFKA_LOG_ERROR(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::ERROR)
+
+/**
+ * @brief
+ */
 #define KAFKA_LOG_FATAL(logger) KAFKA_LOG_LEVEL(logger, KAFKA::LogLevel::FATAL)
+
+/**
+ * @brief 使用格式化方式将日志级别level的日志写入到logger中
+ */
+
+#define KAFKA_LOG_FMT_LEVEL(logger, level, fmt, ...) \
+    if (logger->getLevel() <= level)  \
+        KAFKA::LogEventWrap(KAFKA::LogEvent::LogEventPtr(new KAFKA::LogEvent(logger, level, \
+                            __FILE__, __LINE__, 0, 1, \
+                            2, time(0), "main"))).getEvent()->format(fmt, __VA_ARGS__)
+
+/**
+ * @brief
+ */
+#define KAFKA_LOG_FMT_DEBUG(logger, fmt, ...) KAFKA_LOG_FMT_LEVEL(logger, KAFKA::LogLevel::DEBUG, fmt, __VA_ARGS__)
+
+/**
+ * @brief
+ */
+#define KAFKA_LOG_FMT_INFO(logger, fmt, ...) KAFKA_LOG_FMT_LEVEL(logger, KAFKA::LogLevel::INFO, fmt, __VA_ARGS__)
+
+/**
+ * @brief
+ */
+#define KAFKA_LOG_FMT_WARN(logger, fmt, ...) KAFKA_LOG_FMT_LEVEL(logger, KAFKA::LogLevel::WARN, fmt, __VA_ARGS__)
+
+/**
+ * @brief
+ */
+#define KAFKA_LOG_FMT_ERROR(logger, fmt, ...) KAFKA_LOG_FMT_LEVEL(logger, KAFKA::LogLevel::ERROR, fmt, __VA_ARGS__)
+
+/**
+ * @brief
+ */
+#define KAFKA_LOG_FMT_FATAL(logger, fmt, ...) KAFKA_LOG_FMT_LEVEL(logger, KAFKA::LogLevel::FATAL, fmt, __VA_ARGS__)
 
 
 KAFKA_NAMESPACE_BEGIN
@@ -420,6 +479,18 @@ public:
      * @brief
      * @return
      */
+    Logger::LoggerPtr getRootLogger() const {return m_root;}
+
+    /**
+     * @brief
+     * @param root
+     */
+    void setRootLogger(const Logger::LoggerPtr root) {m_root = root;}
+
+    /**
+     * @brief
+     * @return
+     */
     std::string toYamlString();
 private:
     //日志级别
@@ -469,6 +540,44 @@ private:
     std::ofstream m_filestream;
     uint64_t m_lastTime = 0;
 };
+
+class LoggerManager {
+public:
+    /**
+     * @brief
+     */
+    LoggerManager();
+
+    /**
+     * @brief
+     * @param name
+     * @return
+     */
+    Logger::LoggerPtr getLogger(const std::string name);
+
+    /**
+     * @brief
+     */
+    void init();
+
+    /**
+     * @brief
+     * @return
+     */
+    Logger::LoggerPtr getRoot() const {return m_root;}
+
+    /**
+     * @brief
+     */
+     std::string toYamlString();
+
+private:
+    std::unordered_map<std::string, Logger::LoggerPtr> m_loggers;
+    Logger::LoggerPtr m_root;
+};
+
+//日志管理类的单例模式
+typedef KAFKA::Singleton<LoggerManager> LoggerMgr;
 
 KAFKA_NAMESPACE_END
 #endif //KAFKA_LOG_H

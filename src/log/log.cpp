@@ -520,4 +520,33 @@ bool FileLogAppender::reopen() {
     return !!m_filestream;
 }
 
+LoggerManager::LoggerManager() {
+    m_root.reset(new Logger);
+    m_root->addAppender(LogAppender::LogAppenderPtr(new StdoutLogAppender));
+
+    m_loggers[m_root->getName()] = m_root;
+
+    init();
+}
+
+Logger::LoggerPtr LoggerManager::getLogger(const std::string name) {
+    auto it = m_loggers.find(name);
+    if (it != m_loggers.end()) {
+        return it->second;
+    }
+
+    Logger::LoggerPtr logger(new Logger(name));
+    logger->setRootLogger(m_root);
+    m_loggers[name] = logger;
+    return logger;
+}
+
+void LoggerManager::init() {
+    //do nothing for now
+}
+
+std::string LoggerManager::toYamlString() {
+    return "";
+}
+
 KAFKA_NAMESPACE_END
